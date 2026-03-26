@@ -1,6 +1,6 @@
 # metabase-skill
 
-Reusable Metabase API transport layer plus a local AI skill for Codex and Claude Code.
+Reusable Metabase API transport layer plus a self-contained local AI skill for Codex and Claude Code.
 
 ## Install Locally
 
@@ -12,18 +12,24 @@ cd <metabase-agent>
 node ../metabase-skill/bin/install-local.mjs
 ```
 
+To uninstall the skill:
+
+```bash
+node ../metabase-skill/bin/uninstall-local.mjs
+```
+
 The installer configures:
 
-- local `file:` dependency on `../metabase-skill`
-- `.env.example` and optional `.env`
-- `AGENTS.md` and `CLAUDE.md`
-- Codex and Claude local skill symlinks
-- a smoke-check script for Metabase access
+- `.agents/skills/metabase-skill`
+- optional `.claude/skills/metabase-skill` symlink
+- only the self-contained skill folder, with no `package.json`, `.env`, `gitignore`, or repo scaffolding changes
 
 ## Library
 
 ```ts
-import { createMetabaseClient } from "metabase-skill";
+const { createMetabaseClient } = await import(
+  "/absolute/path/to/.agents/skills/metabase-skill/sdk/metabase-client.mjs"
+);
 
 const client = createMetabaseClient({
   baseUrl: process.env.METABASE_BASE_URL!,

@@ -1,16 +1,22 @@
 ---
 name: metabase
-description: Research Metabase databases, inspect schema, run saved questions, and execute ad-hoc MBQL or SQL through the Metabase API without MCP. Use when a project can provide METABASE_BASE_URL and METABASE_API_KEY plus the metabase-skill library.
+description: Research Metabase databases, inspect schema, run saved questions, and execute ad-hoc MBQL or SQL through the Metabase API without MCP. Use when a project can provide METABASE_BASE_URL and METABASE_API_KEY and this installed metabase-skill folder is available.
 ---
 
 # Metabase API Skill
 
-Use this skill when you need Metabase-backed research or analytics through the local `metabase-skill` library.
+Use this skill when you need Metabase-backed research or analytics through the installed self-contained `metabase-skill` bundle.
 
 ## Fast Start
 
 - Get `METABASE_BASE_URL` and `METABASE_API_KEY` from the user or the project configuration.
-- Import `createMetabaseClient` from `metabase-skill`.
+- This installed skill folder is self-contained. The transport layer is bundled at `sdk/metabase-client.mjs`.
+- Import `createMetabaseClient` from that bundled module.
+- Example:
+  ```js
+  const { createMetabaseClient } = await import("/absolute/path/to/.../skills/metabase-skill/sdk/metabase-client.mjs");
+  const client = createMetabaseClient({ baseUrl, apiKey });
+  ```
 - Create one client with `createMetabaseClient({ baseUrl, apiKey })`.
 - Use the transport helpers from that client instance, for example `client.database.list()` or `client.dataset.query(...)`.
 - Prefer helper namespaces over ad-hoc endpoints:
@@ -32,6 +38,7 @@ Use this skill when you need Metabase-backed research or analytics through the l
 
 ## Guidance
 
+- If you need the actual transport functions, load them from this skill folder's `sdk/metabase-client.mjs`, not from the repo being analyzed.
 - Prefer metadata and saved questions before writing native SQL from scratch.
 - Use `card.queryJson(...)` when you want ready-to-consume row objects.
 - Use `dataset.export(...)`, `card.queryExport(...)`, or `dashboard.queryCardExport(...)` for CSV/XLSX/JSON downloads.

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import process from "node:process";
 import readline from "node:readline/promises";
@@ -10,11 +10,9 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
+const sourceSkillDir = path.join(repoRoot, "skill");
+const sourceRuntimePath = path.join(sourceSkillDir, "sdk", "metabase-client.mjs");
 const args = process.argv.slice(2);
-const hasYes = args.includes("--yes");
-const hasNoInstall = args.includes("--no-install");
-const hasCodex = args.includes("--codex");
-const hasClaude = args.includes("--claude");
 
 function getArg(name) {
   const direct = args.find((arg) => arg.startsWith(`${name}=`));
@@ -32,12 +30,12 @@ function getArg(name) {
   return undefined;
 }
 
-function toPosix(value) {
-  return value.split(path.sep).join("/");
+function hasFlag(name) {
+  return args.includes(name);
 }
 
 function promptEnabled() {
-  return !hasYes && process.stdin.isTTY && process.stdout.isTTY;
+  return !hasFlag("--yes") && process.stdin.isTTY && process.stdout.isTTY;
 }
 
 async function askText(rl, label, defaultValue) {
@@ -61,56 +59,6 @@ function ensureDir(dirPath) {
   mkdirSync(dirPath, { recursive: true });
 }
 
-function writeTextFile(filePath, content) {
-  ensureDir(path.dirname(filePath));
-  writeFileSync(filePath, content, "utf8");
-}
-
-function mergeGitignore(filePath, entries) {
-  const existing = existsSync(filePath) ? readFileSync(filePath, "utf8").split(/\r?\n/) : [];
-  const set = new Set(existing.filter(Boolean));
-
-  for (const entry of entries) {
-    set.add(entry);
-  }
-
-  writeTextFile(filePath, `${Array.from(set).sort().join("\n")}\n`);
-}
-
-function ensureSymlink(linkPath, targetPath) {
-  ensureDir(path.dirname(linkPath));
-  const relativeTarget = toPosix(path.relative(path.dirname(linkPath), targetPath)) || ".";
-
-  if (existsSync(linkPath) || lstatSafe(linkPath)) {
-    const current = lstatSafe(linkPath);
-
-    if (current?.isSymbolicLink() && readlinkSync(linkPath) === relativeTarget) {
-      return;
-    }
-
-    rmSync(linkPath, { force: true, recursive: true });
-  }
-
-  symlinkSync(relativeTarget, linkPath, "dir");
-}
-
-function ensureFileSymlink(linkPath, targetPath) {
-  ensureDir(path.dirname(linkPath));
-  const relativeTarget = toPosix(path.relative(path.dirname(linkPath), targetPath)) || ".";
-
-  if (existsSync(linkPath) || lstatSafe(linkPath)) {
-    const current = lstatSafe(linkPath);
-
-    if (current?.isSymbolicLink() && readlinkSync(linkPath) === relativeTarget) {
-      return;
-    }
-
-    rmSync(linkPath, { force: true, recursive: true });
-  }
-
-  symlinkSync(relativeTarget, linkPath, "file");
-}
-
 function lstatSafe(filePath) {
   try {
     return lstatSync(filePath);
@@ -119,136 +67,72 @@ function lstatSafe(filePath) {
   }
 }
 
-function renderPackageJson({ dependencySpec, installerPath }) {
-  const existing = existsSync(path.join(process.cwd(), "package.json"))
-    ? JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf8"))
-    : null;
-  const name = existing?.name ?? path.basename(process.cwd());
+function toPosix(value) {
+  return value.split(path.sep).join("/");
+}
 
-  return {
-    ...(existing ?? {}),
-    name,
-    private: true,
-    type: "module",
-    scripts: {
-      ...(existing?.scripts ?? {}),
-      "check:metabase": "node ./scripts/check-metabase.mjs",
-      "setup:metabase": `node ${installerPath} --target .`
-    },
-    dependencies: {
-      ...(existing?.dependencies ?? {}),
-      dotenv: existing?.dependencies?.dotenv ?? "^17.3.1",
-      "metabase-skill": dependencySpec
+function ensureDirSymlink(linkPath, targetPath) {
+  ensureDir(path.dirname(linkPath));
+  const relativeTarget = toPosix(path.relative(path.dirname(linkPath), targetPath)) || ".";
+  const current = lstatSafe(linkPath);
+
+  if (current?.isSymbolicLink() && readlinkSync(linkPath) === relativeTarget) {
+    return;
+  }
+
+  if (current) {
+    rmSync(linkPath, { force: true, recursive: true });
+  }
+
+  symlinkSync(relativeTarget, linkPath, "dir");
+}
+
+function copySkill(sourceDir, destinationDir) {
+  rmSync(destinationDir, { recursive: true, force: true });
+  ensureDir(path.dirname(destinationDir));
+  cpSync(sourceDir, destinationDir, {
+    recursive: true
+  });
+}
+
+function digestDirectory(dirPath, baseDir = dirPath) {
+  const hash = createHash("sha256");
+  const entries = readdirSync(dirPath, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
+
+  for (const entry of entries) {
+    const absolutePath = path.join(dirPath, entry.name);
+    const relativePath = toPosix(path.relative(baseDir, absolutePath));
+
+    if (entry.isDirectory()) {
+      hash.update(`dir:${relativePath}\n`);
+      hash.update(digestDirectory(absolutePath, baseDir));
+      continue;
     }
-  };
-}
 
-function renderReadme() {
-  return `# metabase-agent
+    if (entry.isFile()) {
+      hash.update(`file:${relativePath}\n`);
+      hash.update(readFileSync(absolutePath));
+      hash.update("\n");
+      continue;
+    }
 
-Ad-hoc local repo for running Codex and Claude against Metabase through the shared \`metabase-skill\` package.
+    if (entry.isSymbolicLink()) {
+      hash.update(`symlink:${relativePath}:${readlinkSync(absolutePath)}\n`);
+    }
+  }
 
-## Setup
-
-\`\`\`bash
-git clone <public-metabase-skill-repo>
-cd metabase-agent
-node ../metabase-skill/bin/install-local.mjs
-\`\`\`
-
-Then:
-
-1. Fill \`.env\` if the installer did not create it for you.
-2. Run \`npm run check:metabase\`.
-3. Use the shared \`metabase\` skill plus the local \`metabase-agent\` skill.
-`;
-}
-
-function renderAgentsMd() {
-  return `# Repository Guidelines
-
-- Load \`.env\` before running Metabase checks or scripts.
-- Prefer the local \`metabase-skill\` library over ad-hoc \`fetch\` calls.
-- Start work with access + discovery:
-  - \`session.properties()\`
-  - \`user.current()\`
-  - \`database.list()\`
-  - \`database.metadata(id)\`
-  - \`search.list({ q })\`
-- Prefer schema exploration and saved questions before writing native SQL.
-- Keep repo-specific agent workflow in the local \`metabase-agent\` skill.
-- Use \`npm run check:metabase\` as the first smoke check after env changes.
-`;
-}
-
-function renderRepoSkill() {
-  return `---
-name: metabase-agent
-description: Repo-specific instructions for using the local metabase-skill package and env wiring inside metabase-agent.
----
-
-# metabase-agent
-
-Use this skill when working inside \`metabase-agent\`.
-
-## Repo Workflow
-
-- Read \`.env\` for \`METABASE_BASE_URL\` and \`METABASE_API_KEY\`.
-- Validate access with \`npm run check:metabase\` before deeper work.
-- Import from \`metabase-skill\`, not from raw relative paths.
-- Prefer:
-  - \`session.properties()\`
-  - \`user.current()\`
-  - \`database.list()\`
-  - \`database.metadata(id)\`
-  - \`search.list({ q })\`
-  - \`card.query(...)\`
-  - \`dataset.query(...)\`
-- Keep raw endpoint usage for cases where helpers do not cover the endpoint.
-`;
-}
-
-function renderEnvExample() {
-  return `# Copy to .env and put the real API key there. Do not commit .env.
-METABASE_BASE_URL=https://metabase.portals-mem.com
-METABASE_API_KEY=your_key_here
-`;
-}
-
-function renderEnv(baseUrl, apiKey) {
-  return `METABASE_BASE_URL=${baseUrl}
-METABASE_API_KEY=${apiKey}
-`;
-}
-
-function renderCheckScript() {
-  return `#!/usr/bin/env node
-
-import { config as loadDotEnv } from "dotenv";
-import { createMetabaseClient } from "metabase-skill";
-
-loadDotEnv();
-
-const baseUrl = process.env.METABASE_BASE_URL;
-const apiKey = process.env.METABASE_API_KEY;
-
-if (!baseUrl || !apiKey) {
-  console.error("Missing METABASE_BASE_URL or METABASE_API_KEY in .env");
-  process.exit(1);
-}
-
-const client = createMetabaseClient({ baseUrl, apiKey });
-const [session, currentUser] = await Promise.all([
-  client.session.properties(),
-  client.user.current()
-]);
-
-console.log(\`Metabase version: \${session.version?.tag ?? "unknown"}\`);
-console.log(\`Current user: \${currentUser.common_name ?? currentUser.email ?? currentUser.id ?? "unknown"}\`);
-`;
+  return hash.digest("hex");
 }
 
 async function main() {
+  if (!existsSync(path.join(sourceSkillDir, "SKILL.md"))) {
+    throw new Error(`Expected skill template at ${path.join(sourceSkillDir, "SKILL.md")}`);
+  }
+
+  if (!existsSync(sourceRuntimePath)) {
+    throw new Error(`Expected bundled runtime at ${sourceRuntimePath}. Run npm run build first.`);
+  }
+
   const rl = promptEnabled()
     ? readline.createInterface({
         input: process.stdin,
@@ -257,99 +141,66 @@ async function main() {
     : null;
 
   const defaultTarget = path.resolve(getArg("--target") ?? process.cwd());
-  const defaultSkillPath = path.resolve(getArg("--skill-path") ?? repoRoot);
-
   const targetDir = rl ? path.resolve(await askText(rl, "Target repo path", defaultTarget)) : defaultTarget;
-  const skillPath = rl ? path.resolve(await askText(rl, "Path to local metabase-skill repo", defaultSkillPath)) : defaultSkillPath;
-  const installCodex = hasCodex || (!hasCodex && !hasClaude && (rl ? await askBoolean(rl, "Wire Codex local skills?", true) : true));
-  const installClaude = hasClaude || (!hasCodex && !hasClaude && (rl ? await askBoolean(rl, "Wire Claude local skills?", true) : true));
-  const shouldRunInstall = hasNoInstall ? false : rl ? await askBoolean(rl, "Run npm install after scaffolding?", true) : true;
+  const defaultSkillsDir = path.resolve(getArg("--skills-dir") ?? path.join(targetDir, ".agents", "skills"));
+  const skillsDir = rl ? path.resolve(await askText(rl, "Codex skills dir", defaultSkillsDir)) : defaultSkillsDir;
+  const defaultClaudeSkillsDir = path.resolve(getArg("--claude-skills-dir") ?? path.join(targetDir, ".claude", "skills"));
+  const installClaude = hasFlag("--claude") || (rl ? await askBoolean(rl, "Create Claude skill symlink?", true) : true);
+  const claudeSkillsDir = defaultClaudeSkillsDir;
+  const destinationSkillDir = path.join(skillsDir, "metabase-skill");
+  const alreadyInstalled = existsSync(destinationSkillDir);
+  const sourceDigest = digestDirectory(sourceSkillDir);
+  const installedDigest = alreadyInstalled ? digestDirectory(destinationSkillDir) : null;
+  const isUpToDate = alreadyInstalled && installedDigest === sourceDigest;
 
-  if (!existsSync(skillPath)) {
-    throw new Error(`Skill repo does not exist: ${skillPath}`);
+  if (isUpToDate) {
+    if (installClaude) {
+      ensureDirSymlink(path.join(claudeSkillsDir, "metabase-skill"), destinationSkillDir);
+    }
+
+    rl?.close();
+    process.stdout.write([
+      "",
+      `metabase-skill is already up to date at ${destinationSkillDir}`,
+      "No other project files were modified.",
+      ""
+    ].join("\n"));
+    return;
   }
 
-  if (!existsSync(path.join(skillPath, "skill", "SKILL.md"))) {
-    throw new Error(`Expected shared skill at ${path.join(skillPath, "skill", "SKILL.md")}`);
-  }
+  if (alreadyInstalled) {
+    const replace = rl
+      ? await askBoolean(rl, `Changes detected for ${destinationSkillDir}. Update it?`, true)
+      : true;
 
-  ensureDir(targetDir);
-  process.chdir(targetDir);
-
-  const dependencySpec = `file:${toPosix(path.relative(targetDir, skillPath) || ".")}`;
-  const installerPath = toPosix(path.relative(targetDir, path.join(skillPath, "bin", "install-local.mjs")));
-  const packageJsonPath = path.join(targetDir, "package.json");
-  const packageJson = renderPackageJson({
-    dependencySpec,
-    installerPath
-  });
-
-  writeTextFile(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
-  mergeGitignore(path.join(targetDir, ".gitignore"), [".env", "node_modules"]);
-  writeTextFile(path.join(targetDir, ".env.example"), renderEnvExample());
-  writeTextFile(path.join(targetDir, "README.md"), renderReadme());
-  writeTextFile(path.join(targetDir, "AGENTS.md"), renderAgentsMd());
-  writeTextFile(path.join(targetDir, "scripts", "check-metabase.mjs"), renderCheckScript());
-  writeTextFile(path.join(targetDir, ".agents", "skills", "metabase-agent", "SKILL.md"), renderRepoSkill());
-
-  if (installClaude) {
-    ensureFileSymlink(path.join(targetDir, "CLAUDE.md"), path.join(targetDir, "AGENTS.md"));
-  }
-
-  if (installCodex) {
-    ensureSymlink(path.join(targetDir, ".agents", "skills", "metabase"), path.join(skillPath, "skill"));
-  }
-
-  if (installClaude) {
-    ensureDir(path.join(targetDir, ".claude", "skills"));
-    ensureSymlink(path.join(targetDir, ".claude", "skills", "metabase-agent"), path.join(targetDir, ".agents", "skills", "metabase-agent"));
-
-    if (installCodex) {
-      ensureSymlink(path.join(targetDir, ".claude", "skills", "metabase"), path.join(targetDir, ".agents", "skills", "metabase"));
-    } else {
-      ensureSymlink(path.join(targetDir, ".claude", "skills", "metabase"), path.join(skillPath, "skill"));
+    if (!replace) {
+      rl.close();
+      process.stdout.write("Install cancelled.\n");
+      return;
     }
   }
 
-  const envPath = path.join(targetDir, ".env");
-  const envExists = existsSync(envPath);
-  let shouldWriteEnv = !envExists;
+  copySkill(sourceSkillDir, destinationSkillDir);
 
-  if (envExists && rl) {
-    shouldWriteEnv = await askBoolean(rl, "Overwrite existing .env?", false);
-  }
-
-  if (shouldWriteEnv) {
-    const baseUrl = rl
-      ? await askText(rl, "METABASE_BASE_URL", process.env.METABASE_BASE_URL ?? "https://metabase.portals-mem.com")
-      : process.env.METABASE_BASE_URL ?? "https://metabase.portals-mem.com";
-    const apiKey = rl
-      ? await askText(rl, "METABASE_API_KEY", process.env.METABASE_API_KEY ?? "")
-      : process.env.METABASE_API_KEY ?? "";
-
-    writeTextFile(envPath, renderEnv(baseUrl, apiKey));
+  if (installClaude) {
+    ensureDirSymlink(path.join(claudeSkillsDir, "metabase-skill"), destinationSkillDir);
   }
 
   rl?.close();
 
-  if (shouldRunInstall) {
-    const install = spawnSync("npm", ["install"], {
-      cwd: targetDir,
-      stdio: "inherit"
-    });
+  const lines = [
+    "",
+    `${alreadyInstalled ? "Updated" : "Installed"} metabase-skill at ${destinationSkillDir}`
+  ];
 
-    if (install.status !== 0) {
-      process.exit(install.status ?? 1);
-    }
+  if (installClaude) {
+    lines.push(`Claude symlink: ${path.join(claudeSkillsDir, "metabase-skill")}`);
   }
 
-  process.stdout.write([
-    "",
-    `Scaffolded ${targetDir}`,
-    `Shared skill source: ${skillPath}`,
-    "Next step: npm run check:metabase",
-    ""
-  ].join("\n"));
+  lines.push("No other project files were modified.");
+  lines.push("");
+
+  process.stdout.write(lines.join("\n"));
 }
 
 await main();

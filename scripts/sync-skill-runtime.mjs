@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
-const sourcePath = path.resolve(process.cwd(), "dist/client.js");
+const sourcePath = path.resolve(process.cwd(), "dist/index.js");
 const outputPath = path.resolve(process.cwd(), "skill/sdk/metabase-client.mjs");
 
 const source = await readFile(sourcePath, "utf8");

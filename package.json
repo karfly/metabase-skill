@@ -27,16 +27,11 @@
   "scripts": {
     "clean": "node --eval \"import('node:fs').then((fs) => fs.rmSync('dist', { recursive: true, force: true }))\"",
     "build": "npm run clean && tsc -p tsconfig.json && node ./scripts/sync-skill-runtime.mjs",
-    "sync:skill-runtime": "node ./scripts/sync-skill-runtime.mjs",
-    "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
-    "test": "tsx --test test/**/*.test.ts",
-    "test:live": "METABASE_LIVE_TEST=1 tsx --test test/live.test.ts",
-    "sync:spec": "node ./scripts/sync-openapi.mjs"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test test/client.test.ts"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
-    "dotenv": "^17.3.1",
-    "openapi-typescript": "^7.13.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }

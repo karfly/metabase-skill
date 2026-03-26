@@ -96,32 +96,27 @@ async function parseResponseBody(response) {
         return response.text();
     }
     const arrayBuffer = await response.arrayBuffer();
-    if (arrayBuffer.byteLength === 0) {
-        return undefined;
-    }
-    return new Uint8Array(arrayBuffer);
+    return arrayBuffer.byteLength > 0 ? new Uint8Array(arrayBuffer) : undefined;
 }
 export function createMetabaseClient(options) {
     const baseUrl = normalizeBaseUrl(options.baseUrl);
     const fetchImpl = options.fetch ?? globalThis.fetch;
-    const apiKey = options.apiKey;
-    const userAgent = options.userAgent;
     if (!fetchImpl) {
         throw new Error("No fetch implementation available. Pass one explicitly in createMetabaseClient({ fetch }).");
     }
-    async function requestInternal(method, path, requestOptions = {}) {
+    async function requestRaw(method, path, requestOptions = {}) {
         const url = new URL(`${baseUrl}${buildPath(path, requestOptions.pathParams)}`);
         appendQuery(url, requestOptions.query);
         const headers = new Headers(requestOptions.headers);
-        headers.set("x-api-key", apiKey);
+        headers.set("x-api-key", options.apiKey);
         headers.set("accept", headers.get("accept") ?? "application/json, text/plain;q=0.9, */*;q=0.8");
-        if (userAgent) {
-            headers.set("user-agent", userAgent);
+        if (options.userAgent) {
+            headers.set("user-agent", options.userAgent);
         }
         const body = encodeBody(requestOptions.body, headers, requestOptions.contentType);
         const init = {
             headers,
-            method
+            method: method.toUpperCase()
         };
         if (body !== undefined) {
             init.body = body;
@@ -132,10 +127,10 @@ export function createMetabaseClient(options) {
         const response = await fetchImpl(url, init);
         const data = await parseResponseBody(response);
         if (!response.ok) {
-            throw new MetabaseApiError(`${method} ${url} failed with ${response.status} ${response.statusText}`, {
+            throw new MetabaseApiError(`${method.toUpperCase()} ${url} failed with ${response.status} ${response.statusText}`, {
                 data,
                 headers: response.headers,
-                method,
+                method: method.toUpperCase(),
                 status: response.status,
                 statusText: response.statusText,
                 url: url.toString()
@@ -149,197 +144,190 @@ export function createMetabaseClient(options) {
             url: url.toString()
         };
     }
-    async function request(method, path, options = {}) {
-        const result = await requestInternal(method.toUpperCase(), path, options);
-        return result.data;
-    }
-    async function requestRaw(method, path, options = {}) {
-        return requestInternal(method.toUpperCase(), path, options);
-    }
-    async function requestAny(method, path, options = {}) {
-        const result = await requestInternal(method, path, options);
-        return result.data;
+    async function request(method, path, requestOptions = {}) {
+        const response = await requestRaw(method, path, requestOptions);
+        return response.data;
     }
     const client = {
         apiKey: options.apiKey,
         baseUrl,
         get(path, requestOptions) {
-            return requestInternal("GET", path, requestOptions).then((result) => result.data);
+            return request("GET", path, requestOptions);
         },
         post(path, requestOptions) {
-            return requestInternal("POST", path, requestOptions).then((result) => result.data);
+            return request("POST", path, requestOptions);
         },
         put(path, requestOptions) {
-            return requestInternal("PUT", path, requestOptions).then((result) => result.data);
+            return request("PUT", path, requestOptions);
         },
         delete(path, requestOptions) {
-            return requestInternal("DELETE", path, requestOptions).then((result) => result.data);
+            return request("DELETE", path, requestOptions);
         },
         request,
         requestRaw,
         session: {
-            properties(requestOptions) {
-                return requestAny("GET", "/api/session/properties", requestOptions);
+            properties(options) {
+                return request("GET", "/api/session/properties", options);
             }
         },
         user: {
-            current(requestOptions) {
-                return requestAny("GET", "/api/user/current", requestOptions);
+            current(options) {
+                return request("GET", "/api/user/current", options);
             }
         },
         database: {
-            list(requestOptions) {
-                return requestAny("GET", "/api/database/", requestOptions);
+            list(options) {
+                return request("GET", "/api/database/", options);
             },
-            get(id, requestOptions) {
-                return requestAny("GET", "/api/database/{id}", {
+            get(id, options) {
+                return request("GET", "/api/database/{id}", {
                     pathParams: { id },
-                    query: requestOptions?.query,
-                    signal: requestOptions?.signal
+                    query: options?.query,
+                    signal: options?.signal
                 });
             },
-            metadata(id, query, requestOptions) {
-                return requestAny("GET", "/api/database/{id}/metadata", {
+            metadata(id, query, options) {
+                return request("GET", "/api/database/{id}/metadata", {
                     pathParams: { id },
-                    query: query,
-                    signal: requestOptions?.signal
+                    query,
+                    signal: options?.signal
                 });
             }
         },
         table: {
-            list(requestOptions) {
-                return requestAny("GET", "/api/table/", requestOptions);
+            list(options) {
+                return request("GET", "/api/table/", options);
             },
-            get(id, requestOptions) {
-                return requestAny("GET", "/api/table/{id}", {
+            get(id, options) {
+                return request("GET", "/api/table/{id}", {
                     pathParams: { id },
-                    signal: requestOptions?.signal
+                    signal: options?.signal
                 });
             },
-            queryMetadata(id, requestOptions) {
-                return requestAny("GET", "/api/table/{id}/query_metadata", {
+            queryMetadata(id, options) {
+                return request("GET", "/api/table/{id}/query_metadata", {
                     pathParams: { id },
-                    signal: requestOptions?.signal
+                    signal: options?.signal
                 });
             },
-            fks(id, requestOptions) {
-                return requestAny("GET", "/api/table/{id}/fks", {
+            fks(id, options) {
+                return request("GET", "/api/table/{id}/fks", {
                     pathParams: { id },
-                    signal: requestOptions?.signal
+                    signal: options?.signal
                 });
             }
         },
         field: {
-            get(id, requestOptions) {
-                return requestAny("GET", "/api/field/{id}", {
+            get(id, options) {
+                return request("GET", "/api/field/{id}", {
                     pathParams: { id },
-                    signal: requestOptions?.signal
+                    signal: options?.signal
                 });
             },
-            summary(id, requestOptions) {
-                return requestAny("GET", "/api/field/{id}/summary", {
+            summary(id, options) {
+                return request("GET", "/api/field/{id}/summary", {
                     pathParams: { id },
-                    signal: requestOptions?.signal
+                    signal: options?.signal
                 });
             },
-            values(id, requestOptions) {
-                return requestAny("GET", "/api/field/{id}/values", {
+            values(id, options) {
+                return request("GET", "/api/field/{id}/values", {
                     pathParams: { id },
-                    signal: requestOptions?.signal
+                    signal: options?.signal
                 });
             }
         },
         search: {
-            list(query, requestOptions) {
-                return requestAny("GET", "/api/search/", {
-                    query: query,
-                    signal: requestOptions?.signal
+            list(query, options) {
+                return request("GET", "/api/search/", {
+                    query,
+                    signal: options?.signal
                 });
             }
         },
         collection: {
-            list(requestOptions) {
-                return requestAny("GET", "/api/collection/", requestOptions);
+            list(options) {
+                return request("GET", "/api/collection/", options);
             },
-            get(id, requestOptions) {
-                return requestAny("GET", "/api/collection/{id}", {
+            get(id, options) {
+                return request("GET", "/api/collection/{id}", {
                     pathParams: { id },
-                    signal: requestOptions?.signal
+                    signal: options?.signal
                 });
             },
-            items(id, query, requestOptions) {
-                return requestAny("GET", "/api/collection/{id}/items", {
+            items(id, query, options) {
+                return request("GET", "/api/collection/{id}/items", {
                     pathParams: { id },
-                    query: query,
-                    signal: requestOptions?.signal
+                    query,
+                    signal: options?.signal
                 });
             }
         },
         card: {
-            list(requestOptions) {
-                return requestAny("GET", "/api/card/", requestOptions);
+            list(options) {
+                return request("GET", "/api/card/", options);
             },
-            get(id, requestOptions) {
-                return requestAny("GET", "/api/card/{id}", {
+            get(id, options) {
+                return request("GET", "/api/card/{id}", {
                     pathParams: { id },
-                    query: requestOptions?.query,
-                    signal: requestOptions?.signal
+                    query: options?.query,
+                    signal: options?.signal
                 });
             },
-            query(id, body = {}, requestOptions) {
-                return requestAny("POST", "/api/card/{card-id}/query", {
+            query(id, body = {}, options) {
+                return request("POST", "/api/card/{card-id}/query", {
                     body: {
                         ignore_cache: false,
                         ...body
                     },
                     pathParams: { "card-id": id },
-                    signal: requestOptions?.signal
+                    signal: options?.signal
                 });
             },
-            queryJson(id, body = {}, requestOptions) {
-                return requestAny("POST", "/api/card/{card-id}/query/json", {
+            queryJson(id, body = {}, options) {
+                return request("POST", "/api/card/{card-id}/query/json", {
                     body: {
                         ignore_cache: false,
                         ...body
                     },
                     pathParams: { "card-id": id },
-                    signal: requestOptions?.signal
+                    signal: options?.signal
                 });
             },
-            queryExport(id, format, body = {}, requestOptions) {
-                return requestAny("POST", "/api/card/{card-id}/query/{export-format}", {
+            queryExport(id, format, body = {}, options) {
+                return request("POST", "/api/card/{card-id}/query/{export-format}", {
                     body,
                     pathParams: {
                         "card-id": id,
                         "export-format": format
                     },
-                    signal: requestOptions?.signal
+                    signal: options?.signal
                 });
             }
         },
         dashboard: {
-            list(requestOptions) {
-                return requestAny("GET", "/api/dashboard/", requestOptions);
+            list(options) {
+                return request("GET", "/api/dashboard/", options);
             },
-            get(id, requestOptions) {
-                return requestAny("GET", "/api/dashboard/{id}", {
+            get(id, options) {
+                return request("GET", "/api/dashboard/{id}", {
                     pathParams: { id },
-                    signal: requestOptions?.signal
+                    signal: options?.signal
                 });
             },
-            queryCard(dashboardId, dashcardId, cardId, body = {}, requestOptions) {
-                return requestAny("POST", "/api/dashboard/{dashboard-id}/dashcard/{dashcard-id}/card/{card-id}/query", {
+            queryCard(dashboardId, dashcardId, cardId, body = {}, options) {
+                return request("POST", "/api/dashboard/{dashboard-id}/dashcard/{dashcard-id}/card/{card-id}/query", {
                     body,
                     pathParams: {
                         "card-id": cardId,
                         "dashboard-id": dashboardId,
                         "dashcard-id": dashcardId
                     },
-                    signal: requestOptions?.signal
+                    signal: options?.signal
                 });
             },
-            queryCardExport(dashboardId, dashcardId, cardId, format, body = {}, requestOptions) {
-                return requestAny("POST", "/api/dashboard/{dashboard-id}/dashcard/{dashcard-id}/card/{card-id}/query/{export-format}", {
+            queryCardExport(dashboardId, dashcardId, cardId, format, body = {}, options) {
+                return request("POST", "/api/dashboard/{dashboard-id}/dashcard/{dashcard-id}/card/{card-id}/query/{export-format}", {
                     body,
                     pathParams: {
                         "card-id": cardId,
@@ -347,34 +335,34 @@ export function createMetabaseClient(options) {
                         "dashcard-id": dashcardId,
                         "export-format": format
                     },
-                    signal: requestOptions?.signal
+                    signal: options?.signal
                 });
             }
         },
         dataset: {
-            query(body, requestOptions) {
-                return requestAny("POST", "/api/dataset/", {
+            query(body, options) {
+                return request("POST", "/api/dataset/", {
                     body,
-                    signal: requestOptions?.signal
+                    signal: options?.signal
                 });
             },
-            native(body, requestOptions) {
-                return requestAny("POST", "/api/dataset/native", {
+            native(body, options) {
+                return request("POST", "/api/dataset/native", {
                     body,
-                    signal: requestOptions?.signal
+                    signal: options?.signal
                 });
             },
-            queryMetadata(body, requestOptions) {
-                return requestAny("POST", "/api/dataset/query_metadata", {
+            queryMetadata(body, options) {
+                return request("POST", "/api/dataset/query_metadata", {
                     body,
-                    signal: requestOptions?.signal
+                    signal: options?.signal
                 });
             },
-            export(format, body, requestOptions) {
-                return requestAny("POST", "/api/dataset/{export-format}", {
+            export(format, body, options) {
+                return request("POST", "/api/dataset/{export-format}", {
                     body,
                     pathParams: { "export-format": format },
-                    signal: requestOptions?.signal
+                    signal: options?.signal
                 });
             }
         }

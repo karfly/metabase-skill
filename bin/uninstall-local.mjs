@@ -103,8 +103,8 @@ async function main() {
     : null;
 
   const targetDir = path.resolve(getArg("--target") ?? process.cwd());
-  const skillsDir = path.resolve(getArg("--skills-dir") ?? path.join(targetDir, ".agents", "skills"));
-  const claudeSkillsDir = path.resolve(getArg("--claude-skills-dir") ?? path.join(targetDir, ".claude", "skills"));
+  const skillsDir = path.join(targetDir, ".agents", "skills");
+  const claudeSkillsDir = path.join(targetDir, ".claude", "skills");
   const destinationSkillDir = path.join(skillsDir, "metabase-skill");
   const claudeSkillPath = path.join(claudeSkillsDir, "metabase-skill");
   const installed = existsSync(destinationSkillDir) || lstatSafe(destinationSkillDir);

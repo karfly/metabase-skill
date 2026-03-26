@@ -1,6 +1,6 @@
 # metabase-skill
 
-Reusable Metabase API transport layer plus a self-contained local AI skill for Codex and Claude Code.
+Minimal Metabase API transport layer plus a self-contained local AI skill for Codex and Claude Code.
 
 ## Install Locally
 
@@ -52,7 +52,7 @@ Use helper namespaces first:
 
 ```bash
 npm install
-npm run sync:spec
+npm run build
 npm run typecheck
 npm test
 ```

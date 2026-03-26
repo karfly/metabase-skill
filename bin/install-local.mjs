@@ -142,11 +142,8 @@ async function main() {
 
   const defaultTarget = path.resolve(getArg("--target") ?? process.cwd());
   const targetDir = rl ? path.resolve(await askText(rl, "Target repo path", defaultTarget)) : defaultTarget;
-  const defaultSkillsDir = path.resolve(getArg("--skills-dir") ?? path.join(targetDir, ".agents", "skills"));
-  const skillsDir = rl ? path.resolve(await askText(rl, "Codex skills dir", defaultSkillsDir)) : defaultSkillsDir;
-  const defaultClaudeSkillsDir = path.resolve(getArg("--claude-skills-dir") ?? path.join(targetDir, ".claude", "skills"));
-  const installClaude = hasFlag("--claude") || (rl ? await askBoolean(rl, "Create Claude skill symlink?", true) : true);
-  const claudeSkillsDir = defaultClaudeSkillsDir;
+  const skillsDir = path.join(targetDir, ".agents", "skills");
+  const claudeSkillsDir = path.join(targetDir, ".claude", "skills");
   const destinationSkillDir = path.join(skillsDir, "metabase-skill");
   const alreadyInstalled = existsSync(destinationSkillDir);
   const sourceDigest = digestDirectory(sourceSkillDir);
@@ -154,9 +151,7 @@ async function main() {
   const isUpToDate = alreadyInstalled && installedDigest === sourceDigest;
 
   if (isUpToDate) {
-    if (installClaude) {
-      ensureDirSymlink(path.join(claudeSkillsDir, "metabase-skill"), destinationSkillDir);
-    }
+    ensureDirSymlink(path.join(claudeSkillsDir, "metabase-skill"), destinationSkillDir);
 
     rl?.close();
     process.stdout.write([
@@ -181,10 +176,7 @@ async function main() {
   }
 
   copySkill(sourceSkillDir, destinationSkillDir);
-
-  if (installClaude) {
-    ensureDirSymlink(path.join(claudeSkillsDir, "metabase-skill"), destinationSkillDir);
-  }
+  ensureDirSymlink(path.join(claudeSkillsDir, "metabase-skill"), destinationSkillDir);
 
   rl?.close();
 
@@ -192,10 +184,7 @@ async function main() {
     "",
     `${alreadyInstalled ? "Updated" : "Installed"} metabase-skill at ${destinationSkillDir}`
   ];
-
-  if (installClaude) {
-    lines.push(`Claude symlink: ${path.join(claudeSkillsDir, "metabase-skill")}`);
-  }
+  lines.push(`Claude symlink: ${path.join(claudeSkillsDir, "metabase-skill")}`);
 
   lines.push("No other project files were modified.");
   lines.push("");

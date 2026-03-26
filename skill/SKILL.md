@@ -43,4 +43,4 @@ Use this skill when you need Metabase-backed research or analytics through the i
 - Use `card.queryJson(...)` when you want ready-to-consume row objects.
 - Use `dataset.export(...)`, `card.queryExport(...)`, or `dashboard.queryCardExport(...)` for CSV/XLSX/JSON downloads.
 - Fall back to raw `client.get/post/put/delete` only when a helper does not cover the endpoint.
-- The generated OpenAPI types are useful for path and request-shape hints, but Metabase's spec is incomplete for some runtime payloads, so helper methods are the safest default.
+- The bundled client is intentionally small and helper-first. Prefer those helpers over building large custom abstractions in the repo you are analyzing.

@@ -1,0 +1,39 @@
+---
+name: metabase
+description: Research Metabase databases, inspect schema, run saved questions, and execute ad-hoc MBQL or SQL through the Metabase API without MCP. Use when a project can provide METABASE_BASE_URL and METABASE_API_KEY plus the metabase-skill library.
+---
+
+# Metabase API Skill
+
+Use this skill when you need Metabase-backed research or analytics through the local `metabase-skill` library.
+
+## Fast Start
+
+- Get `METABASE_BASE_URL` and `METABASE_API_KEY` from the user or the project configuration.
+- Import `createMetabaseClient` from `metabase-skill`.
+- Create one client with `createMetabaseClient({ baseUrl, apiKey })`.
+- Use the transport helpers from that client instance, for example `client.database.list()` or `client.dataset.query(...)`.
+- Prefer helper namespaces over ad-hoc endpoints:
+  - `session.properties()`, `user.current()`
+  - `database.list()`, `database.metadata(id)`
+  - `table.queryMetadata(id)`, `field.summary(id)`, `field.values(id)`
+  - `search.list({ q })`
+  - `card.list()`, `card.get(id)`, `card.query(id)`
+  - `dashboard.get(id)`, `dashboard.queryCard(...)`
+  - `dataset.query(...)` for ad-hoc MBQL or native SQL
+
+## Recommended Workflow
+
+1. Confirm access with `session.properties()` and `user.current()`.
+2. Discover databases with `database.list()` and detailed schema with `database.metadata(id)`.
+3. Narrow quickly with `search.list({ q })`.
+4. For saved content, inspect `collection`, `card`, and `dashboard` helpers first.
+5. For ad-hoc analysis, use `dataset.query(...)`.
+
+## Guidance
+
+- Prefer metadata and saved questions before writing native SQL from scratch.
+- Use `card.queryJson(...)` when you want ready-to-consume row objects.
+- Use `dataset.export(...)`, `card.queryExport(...)`, or `dashboard.queryCardExport(...)` for CSV/XLSX/JSON downloads.
+- Fall back to raw `client.get/post/put/delete` only when a helper does not cover the endpoint.
+- The generated OpenAPI types are useful for path and request-shape hints, but Metabase's spec is incomplete for some runtime payloads, so helper methods are the safest default.

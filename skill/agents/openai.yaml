@@ -1,0 +1,5 @@
+interface:
+  display_name: "Metabase API"
+  short_description: "Explore schema, search saved content, and run Metabase queries through the local API client."
+  default_prompt: "Use this skill to work with Metabase through the local metabase-skill library: validate access, inspect databases and tables, search saved content, and run saved or ad-hoc queries without MCP."
+

@@ -1,0 +1,43 @@
+{
+  "name": "metabase-skill",
+  "version": "0.1.0",
+  "description": "Reusable Metabase API transport layer and local AI skill.",
+  "type": "module",
+  "private": false,
+  "license": "MIT",
+  "bin": {
+    "metabase-skill-install-local": "./bin/install-local.mjs"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "skill",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "clean": "node --eval \"import('node:fs').then((fs) => fs.rmSync('dist', { recursive: true, force: true }))\"",
+    "build": "npm run clean && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
+    "test": "tsx --test test/**/*.test.ts",
+    "test:live": "METABASE_LIVE_TEST=1 tsx --test test/live.test.ts",
+    "sync:spec": "node ./scripts/sync-openapi.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "openapi-typescript": "^7.13.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
